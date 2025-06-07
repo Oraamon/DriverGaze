@@ -1,0 +1,12 @@
+./event
+./frame
+./runs
+./sometest
+./test_result
+./venv
+
+*/
+
+*.joblib
+*.pt
+
