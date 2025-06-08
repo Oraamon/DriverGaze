@@ -33,9 +33,11 @@ def test_single_image(model, image_path, class_names):
     for i, (idx, conf) in enumerate(zip(top3_indices, top3_confidences)):
         print(f"  {i+1}. {class_names[idx]}: {conf:.4f}")
     print("-" * 50)
+    
+    return predicted_class, result.probs.data.tolist()
 
 def test_random_images(model, test_dir, class_names, num_images=5):
-    print(f"Testando {num_images} imagens aleatórias...")
+    print(f"Testando {num_images} imagens aleatórias do conjunto de validação...")
     
     all_test_images = []
     for class_name in class_names:
@@ -56,28 +58,51 @@ def test_random_images(model, test_dir, class_names, num_images=5):
         test_single_image(model, img_path, class_names)
 
 def evaluate_on_validation_set(model, val_dir, class_names):
-    print("Avaliando no conjunto de validação...")
+    print("Avaliando no conjunto de validação (20% das imagens)...")
     
     correct = 0
     total = 0
     class_correct = {class_name: 0 for class_name in class_names}
     class_total = {class_name: 0 for class_name in class_names}
     
-    for class_idx, class_name in enumerate(class_names):
-        class_dir = os.path.join(val_dir, class_name)
-        if os.path.exists(class_dir):
-            images = glob.glob(os.path.join(class_dir, "*.jpg"))
-            
-            for img_path in images:
-                results = model(img_path)
-                predicted_class_idx = results[0].probs.top1
+    # Criar diretório para resultados se não existir
+    os.makedirs('test_results', exist_ok=True)
+    
+    # Abrir arquivo para salvar predições
+    with open('test_results/predictions.txt', 'w', encoding='utf-8') as f:
+        f.write("Resultados das Predições\n")
+        f.write("======================\n\n")
+        
+        print("\nDistribuição de imagens por classe no conjunto de validação:")
+        for class_idx, class_name in enumerate(class_names):
+            class_dir = os.path.join(val_dir, class_name)
+            if os.path.exists(class_dir):
+                images = glob.glob(os.path.join(class_dir, "*.jpg"))
+                class_total[class_name] = len(images)
+                print(f"  {class_name}: {len(images)} imagens")
                 
-                total += 1
-                class_total[class_name] += 1
+                f.write(f"\nClasse Real: {class_name}\n")
+                f.write("-" * 50 + "\n")
                 
-                if predicted_class_idx == class_idx:
-                    correct += 1
-                    class_correct[class_name] += 1
+                for img_path in images:
+                    results = model(img_path)
+                    predicted_class_idx = results[0].probs.top1
+                    predicted_class = class_names[predicted_class_idx]
+                    probs = results[0].probs.data.tolist()
+                    
+                    total += 1
+                    
+                    if predicted_class_idx == class_idx:
+                        correct += 1
+                        class_correct[class_name] += 1
+                    
+                    # Salvar predição no arquivo
+                    f.write(f"\nImagem: {os.path.basename(img_path)}\n")
+                    f.write(f"Predição: {predicted_class}\n")
+                    f.write("Probabilidades:\n")
+                    for i, (prob, cls) in enumerate(zip(probs, class_names)):
+                        f.write(f"- {cls}: {prob*100:.2f}%\n")
+                    f.write("-" * 30 + "\n")
     
     overall_accuracy = correct / total if total > 0 else 0
     print(f"\nAcurácia geral: {overall_accuracy:.4f} ({correct}/{total})")
@@ -122,13 +147,16 @@ def main():
         print("1. Avaliando no conjunto de validação")
         evaluate_on_validation_set(model, val_dir, class_names)
         
-        print("\n2. Testando imagens aleatórias")
+        print("\n2. Testando imagens aleatórias do conjunto de validação")
         test_random_images(model, val_dir, class_names, num_images=3)
+        
+        print("\n3. Gerando visualizações dos resultados")
+        import visualize_results
+        visualize_results.main()
     else:
         print("Conjunto de validação não encontrado!")
-        print("Testando com imagens do conjunto original...")
-        
-        test_random_images(model, 'frame', class_names, num_images=3)
+        print("Por favor, execute primeiro o script de treinamento (train.py) para criar o conjunto de validação.")
+        return
 
 if __name__ == "__main__":
     main() 
